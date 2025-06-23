@@ -1,10 +1,10 @@
 # Payment-Verification-OCR-2025
-This repository contains a Python script for automating payment verification using Optical Character Recognition (OCR). The script efficiently extracts and validates key payment details from receipts or transaction records.
+This repository contains a Python script for automating payment verification using Optical Character Recognition (OCR) and object detection. The script efficiently extracts and validates key payment details from receipts or transaction records.
 
 ## Features
 
-- Extracts transaction IDs using **PaddleOCR** from payment screenshots.
-- Supports popular platforms like **PhonePe**, **Google Pay**, and **Paytm**.
+- Extracts transaction IDs from payment screenshots using **YOLOv12** for cropping and **pytesseract** for OCR.
+- Supports popular platforms like **PhonePe**, **Google Pay**.
 - Automatically matches extracted transaction IDs with backend transaction logs (Excel/CSV).
 - Marks registrations as "verified" or "not verified".
 - Generates a clean, downloadable Excel report of verified users.
@@ -12,8 +12,9 @@ This repository contains a Python script for automating payment verification usi
 ## Tech Stacks
 
 - Python
-- PaddleOCR 
-- Pandas 
+- YOLOv12 (object detection for cropping relevant regions)
+- pytesseract (OCR)
+- Pandas
 - Regex (for robust ID extraction)
 - Google Colab / Jupyter compatible
 
@@ -35,18 +36,21 @@ This repository contains a Python script for automating payment verification usi
 - **PhonePe**: UTR numbers starting with `T` followed by 21 digits.
 - **Google Pay**: Transaction IDs like `AXIS1234567890`.
 - **Paytm**: 12 to 15 digit numeric transaction reference numbers.
+- **Amazon Pay**: Bank Reference Id (alphanumeric, typically labeled as 'Bank Reference Id').
 
 ## How It Works
 
 1. Upload the registration Excel file.
 2. The script:
    - Downloads each screenshot.
-   - Applies OCR to extract transaction info.
+   - Uses YOLOv12 to detect and crop the transaction ID region.
+   - Applies pytesseract OCR to extract transaction info.
    - Matches it with backend transaction logs.
 3. Generates a final report with verification status.
 
 Payment-Verification-OCR-2025/
-├── Transaction verification.ipynb
+├── Transaction_verification_YOLO .ipynb
+├── model.pt
 ├── README.md
 └── sample_data/
     ├── reg-data.csv
