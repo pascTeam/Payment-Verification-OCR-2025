@@ -6,6 +6,7 @@ import pdfplumber
 # File locations:
 transactionReportPath = "TransactionReport.pdf"
 extractedDataPath = "processed_transactions.csv"
+outputPath = "verified_transactions.csv"
 # ---
 
 
@@ -25,13 +26,10 @@ def inputReport():
             # Find x-position of "rrn"
             if rrnXRange is None:
                 for w in words:
-                    print(w["text"])
                     if w["text"].lower().strip() == "rrn":
                         x0 = w["x0"]
-                        print(x0)
                         rrnXRange = (x0 - 2, x0 + 2)  # add a small margin
                         break
-            print(f"rrnXRange: {rrnXRange}")
             # Find all words that fall within this x-range (column)
             if rrnXRange:
                 for w in words:
@@ -42,6 +40,10 @@ def inputReport():
     # Final result
     df = pd.DataFrame(rrnList, columns=["rrn"])
     return df
+
+
+def save(outputDf: pd.DataFrame):
+    outputDf.to_csv(outputPath, index=False)
 
 
 def main():
@@ -56,9 +58,11 @@ def main():
     )
 
     # Adding ID not found
-    extractedInput[extractedInput["extracted_transaction_id"].isna()][
-        "Verification"
+    extractedInput.loc[
+        extractedInput["extracted_transaction_id"].isna(), "Verification"
     ] = "No ID extracted"
+
+    save(extractedInput)
 
 
 if __name__ == "__main__":
