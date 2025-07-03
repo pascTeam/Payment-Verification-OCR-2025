@@ -121,7 +121,7 @@ def process_transactions(reg_path):
 
 def save(df, output_filename="processed_transactions.xlsx"):
     """Saves the processed dataframe"""
-    df["extracted_transaction_id"] = df["extracted_transaction_id"].astype(int)
+    df["extracted_transaction_id"] = df["extracted_transaction_id"].astype("Int64")
     df.to_csv(output_filename, index=False)
     # files.download(output_filename)
 
