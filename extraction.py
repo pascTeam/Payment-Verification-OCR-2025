@@ -10,13 +10,14 @@ from ultralytics import YOLO
 # --- IMP: Set the paths of the following properly
 # Include the code to choose yolo model here
 modelPath = "model.pt"
-inputPath = "sample.csv"
+inputPath = "input.csv"
 # Input format:
 # column : "screenshots" with all screenshot URLs
 outputPath = "processed_transactions.csv"
 # ---
 
 model = YOLO(modelPath)
+
 # Functions
 
 
