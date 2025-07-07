@@ -9,14 +9,14 @@ from ultralytics import YOLO
 
 # --- IMP: Set the paths of the following properly
 # Include the code to choose yolo model here
-modelPath = "model.pt"
-inputPath = "input.csv"
+MODEL_PATH = "model.pt"
+INPUT_PATH = "input.csv"
 # Input format:
 # column : "screenshots" with all screenshot URLs
-outputPath = "processed_transactions.csv"
+OUTPUT_PATH = "processed_transactions.csv"
 # ---
 
-model = YOLO(modelPath)
+model = YOLO(MODEL_PATH)
 
 # Functions
 
@@ -128,8 +128,8 @@ def save(df, output_filename="processed_transactions.xlsx"):
 
 def main():
     """Main function to handle input, processing, and output."""
-    processed_df = process_transactions(inputPath)
-    save(processed_df, outputPath)
+    processed_df = process_transactions(INPUT_PATH)
+    save(processed_df, OUTPUT_PATH)
 
 
 if __name__ == "__main__":
