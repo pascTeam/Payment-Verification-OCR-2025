@@ -22,7 +22,15 @@ model = YOLO(MODEL_PATH)
 
 
 def find_id_box(img):
-    """Run YOLOv12 model on image and return detected boxes or None."""
+    """
+    Runs the YOLO model on the input image and returns detected boxes or None.
+
+    Args:
+        img (np.ndarray): The input image as a NumPy array.
+
+    Returns:
+        boxes (ultralytics.yolo.engine.results.Boxes or None): Detected bounding boxes, or None if no boxes are found or an error occurs.
+    """
     try:
         results = model.predict(img)
         boxes = results[0].boxes  # boxes object
@@ -35,7 +43,15 @@ def find_id_box(img):
 
 
 def crop_image(img):
-    """Crop image to first detected YOLO box or return None."""
+    """
+    Crops the input image to the first detected YOLO bounding box.
+
+    Args:
+        img (np.ndarray): The input image as a NumPy array.
+
+    Returns:
+        cropped_img (np.ndarray or None): Cropped image as a NumPy array, or None if no box is found.
+    """
     boxes = find_id_box(img)
     if boxes is None:
         return None
@@ -51,7 +67,15 @@ def crop_image(img):
 
 
 def download_image(image_url):
-    """Downloads an image from a given URL and returns it as a NumPy array."""
+    """
+    Downloads an image from a given URL and returns it as a NumPy array.
+
+    Args:
+        image_url (str): URL of the image to download.
+
+    Returns:
+        img (np.ndarray or None): Decoded image as a NumPy array, or None if download fails.
+    """
     response = requests.get(image_url)
     if response.status_code == 200:
         image_array = np.asarray(bytearray(response.content), dtype=np.uint8)
@@ -60,7 +84,15 @@ def download_image(image_url):
 
 
 def process_image_url(image_url):
-    """Processes an image URL and returns the extracted transaction ID."""
+    """
+    Processes an image URL: downloads, crops, runs OCR, and extracts the transaction ID.
+
+    Args:
+        image_url (str): URL of the image to process.
+
+    Returns:
+        transaction_id (str or None): Extracted transaction ID, or None if extraction fails.
+    """
     try:
         if not image_url:
             return None
@@ -71,47 +103,49 @@ def process_image_url(image_url):
                 return None
             text = pytesseract.image_to_string(cropped)
             extract = extract_transaction_details(text)
+            print(extract)
             return extract
         return None
     except Exception as e:
-        print(f"[ERROR] Failed to process image URL: {image_url}\nException: {e}")
+        print(
+            f"[ERROR] Failed to process image URL: {image_url}\nException: {e}")
         return None
 
 
 def extract_transaction_details(text):
-    """Extracts UTR Number (PhonePe), UPI Transaction ID (Google Pay), or Paytm Transaction ID from text."""
+    """
+    Extracts a 12-digit transaction ID from OCR text.
+
+    Args:
+        text (str): OCR-extracted text from the transaction screenshot.
+
+    Returns:
+        transaction_id (str or None): 12-digit transaction ID if found, else None.
+    """
     lines = text.split("\n")
-    buffer = ""
-
-    for i, line in enumerate(lines):
-        # Combine previous buffer if present (handles label on one line, ID on next)
-        combined = buffer + " " + line if buffer else line
-
-        # Match UPI transaction ID / UTR from current or buffered+current line
-        match_upi = re.search(
-            r"(?:UPI Ref(?:erence)?|UTR|Ref(?:erence)? ID|UPI transaction ID)[:\s]*([A-Za-z0-9]{9,})",
-            combined,
-            re.IGNORECASE,
-        )
-
-        if match_upi:
-            return match_upi.group(1)
-
-        # Buffer this line if it might be a label but doesn't contain the ID
-        if re.search(
-            r"(UPI Ref(?:erence)?|UTR|Ref(?:erence)? ID|UPI transaction ID|Bank Reference Id)",
-            line,
-            re.IGNORECASE,
-        ):
-            buffer = line
-        else:
-            buffer = ""
-
-    return None  # No transaction ID found
+    transaction_id = None
+    print(lines)
+    if (len(lines) == 2):
+        transaction_id = lines[0][-12:]
+    elif (len(lines) == 3):
+        transaction_id = lines[1]
+    pattern = r'^\d{12}$'
+    if re.match(pattern, transaction_id):
+        return transaction_id
+    else:
+        return None
 
 
 def process_transactions(reg_path):
-    """Processes an input file to extract and verify transaction details."""
+    """
+    Processes an input CSV file to extract transaction IDs from screenshots.
+
+    Args:
+        reg_path (str): Path to the input CSV file.
+
+    Returns:
+        reg (pd.DataFrame): DataFrame with an added 'extracted_transaction_id' column.
+    """
     reg = pd.read_csv(reg_path, dtype=str)
     reg["extracted_transaction_id"] = (
         reg["screenshot"].dropna().apply(process_image_url)
@@ -120,14 +154,23 @@ def process_transactions(reg_path):
 
 
 def save(df, output_filename="processed_transactions.xlsx"):
-    """Saves the processed dataframe"""
-    df["extracted_transaction_id"] = df["extracted_transaction_id"].astype("Int64")
+    """
+    Saves the processed DataFrame to a CSV file.
+
+    Args:
+        df (pd.DataFrame): DataFrame to save.
+        output_filename (str): Output CSV filename.
+    """
+    df["extracted_transaction_id"] = df["extracted_transaction_id"].astype(
+        "Int64")
     df.to_csv(output_filename, index=False)
     # files.download(output_filename)
 
 
 def main():
-    """Main function to handle input, processing, and output."""
+    """
+    Main function to handle input, processing, and output.
+    """
     processed_df = process_transactions(INPUT_PATH)
     save(processed_df, OUTPUT_PATH)
 
