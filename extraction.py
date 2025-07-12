@@ -103,7 +103,6 @@ def process_image_url(image_url):
                 return None
             text = pytesseract.image_to_string(cropped)
             extract = extract_transaction_details(text)
-            print(extract)
             return extract
         return None
     except Exception as e:
