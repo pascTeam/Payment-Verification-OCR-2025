@@ -106,8 +106,7 @@ def process_image_url(image_url):
             return extract
         return None
     except Exception as e:
-        print(
-            f"[ERROR] Failed to process image URL: {image_url}\nException: {e}")
+        print(f"[ERROR] Failed to process image URL: {image_url}\nException: {e}")
         return None
 
 
@@ -124,11 +123,11 @@ def extract_transaction_details(text):
     lines = text.split("\n")
     transaction_id = None
     print(lines)
-    if (len(lines) == 2):
+    if len(lines) == 2:
         transaction_id = lines[0][-12:]
-    elif (len(lines) == 3):
+    elif len(lines) == 3:
         transaction_id = lines[1]
-    pattern = r'^\d{12}$'
+    pattern = r"^\d{12}$"
     if re.match(pattern, transaction_id):
         return transaction_id
     else:
@@ -160,8 +159,7 @@ def save(df, output_filename="processed_transactions.xlsx"):
         df (pd.DataFrame): DataFrame to save.
         output_filename (str): Output CSV filename.
     """
-    df["extracted_transaction_id"] = df["extracted_transaction_id"].astype(
-        "Int64")
+    df["extracted_transaction_id"] = df["extracted_transaction_id"].astype("Int64")
     df.to_csv(output_filename, index=False)
     # files.download(output_filename)
 

@@ -13,53 +13,59 @@ VERIFIED_DB_PATH = "verified_ID.csv"
 # ---
 
 
-def input_report():
-    """Processes the report into an dataframe object containing all RRN numbers with their paid amount"""
+def extract_column_ranges(words):
+    """Extracts the x-ranges for the 'rrn' and 'amount(rs.)' columns."""
     rrn_x_range = None
     amount_x_range = None
+    for w in words:
+        if rrn_x_range and amount_x_range:
+            break
+        if rrn_x_range is None and w["text"].lower().strip() == "rrn":
+            x0 = w["x0"]
+            rrn_x_range = (x0 - 2, x0 + 2)
+        elif amount_x_range is None and w["text"].lower().strip() == "amount(rs.)":
+            x1 = w["x1"]
+            amount_x_range = (x1 - 5, x1 + 5)
+            print(amount_x_range)
+    return rrn_x_range, amount_x_range
+
+
+def extract_column_values(words, rrn_x_range, amount_x_range):
+    """Extracts the rrn and amount values from the words based on their x-ranges."""
+    rrn_list = []
+    amount_list = []
+    if rrn_x_range:
+        for w in words:
+            if rrn_x_range[0] <= w["x0"] <= rrn_x_range[1]:
+                if w["text"].isdigit() and len(w["text"]) >= 10:
+                    rrn_list.append(w["text"])
+    if amount_x_range:
+        for w in words:
+            if amount_x_range[0] <= w["x1"] <= amount_x_range[1]:
+                if w["text"].isdigit():
+                    amount_list.append(w["text"])
+    return rrn_list, amount_list
+
+
+def input_report():
+    """Processes the report into a dataframe object containing all RRN numbers with their paid amount"""
     rrn_list = []
     amount_list = []
     with pdfplumber.open(TRANSACTION_REPORT_PATH) as pdf:
         for page in pdf.pages:
-            words = page.extract_words(  # Tweaked some settings so that words do not clump together
+            words = page.extract_words(
                 keep_blank_chars=False,
                 use_text_flow=True,
-                x_tolerance=1,  # more precise word detection
+                x_tolerance=1,
                 y_tolerance=1.0,
             )
+            rrn_x_range, amount_x_range = extract_column_ranges(words)
+            page_rrn_list, page_amount_list = extract_column_values(
+                words, rrn_x_range, amount_x_range
+            )
+            rrn_list.extend(page_rrn_list)
+            amount_list.extend(page_amount_list)
 
-            # Find x-position of "rrn" (x0) and "amount(rs.)" (x1)
-            # we are finding x0 of rrn and x1 of amount
-            # This is because in the pdf rrn column is aligned left and amount is alight right
-            for w in words:
-                if rrn_x_range and amount_x_range:
-                    break
-                if rrn_x_range is None and w["text"].lower().strip() == "rrn":
-                    x0 = w["x0"]
-                    rrn_x_range = (x0 - 2, x0 + 2)  # add a small margin
-                elif (
-                    amount_x_range is None
-                    and w["text"].lower().strip() == "amount(rs.)"
-                ):
-                    x1 = w["x1"]
-                    amount_x_range = (x1 - 5, x1 + 5)  # add a small margin
-                    print(amount_x_range)
-
-            # Find all words that fall within this x-range (column)
-            if rrn_x_range:
-                for w in words:
-                    if rrn_x_range[0] <= w["x0"] <= rrn_x_range[1]:
-                        if w["text"].isdigit() and len(w["text"]) >= 10:
-                            rrn_list.append(w["text"])
-
-            # Find all "amount" items that fall within this x-range (column)
-            if amount_x_range:
-                for w in words:
-                    if amount_x_range[0] <= w["x1"] <= amount_x_range[1]:
-                        if w["text"].isdigit():
-                            amount_list.append(w["text"])
-
-    # Final result
     df = pd.DataFrame(
         {"rrn": rrn_list, "amount": amount_list},
     )
@@ -72,9 +78,11 @@ def id_verification(input_df, report_df):
     """Verifies the extracted transaction IDs with the ones in report"""
     # Adding verified/not verified
     input_df["Verification"] = input_df["extracted_transaction_id"].apply(
-        lambda rrn: "Verified"
-        if rrn in set(report_df.dropna()["rrn"].astype(int))
-        else "Not Verified"
+        lambda rrn: (
+            "Verified"
+            if rrn in set(report_df.dropna()["rrn"].astype(int))
+            else "Not Verified"
+        )
     )
 
     # Adding ID not found
