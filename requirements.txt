@@ -19,6 +19,15 @@ requests>=2.31.0
 # YOLO object detection
 ultralytics>=8.0.0
 
+# Web UI framework
+streamlit>=1.28.0
+
+# Image processing for UI
+Pillow>=9.0.0
+
+# Streamlit for UI
+streamlit>=1.20.0
+
 # Note: pytesseract requires Tesseract OCR to be installed on the system
 # For macOS: brew install tesseract
 # For Ubuntu/Debian: sudo apt-get install tesseract-ocr
