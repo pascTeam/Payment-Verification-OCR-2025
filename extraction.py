@@ -5,7 +5,12 @@ import re
 import pytesseract
 import requests
 import pandas as pd
-from ultralytics import YOLO
+import os
+import warnings
+import traceback
+
+# Suppress warnings that might cause issues
+warnings.filterwarnings('ignore')
 
 # --- IMP: Set the paths of the following properly
 # Include the code to choose yolo model here
@@ -16,54 +21,124 @@ INPUT_PATH = "input.csv"
 OUTPUT_PATH = "processed_transactions.csv"
 # ---
 
-model = YOLO(MODEL_PATH)
+# Global model variable
+model = None
+use_yolo = False
 
-# Functions
-
+def load_yolo_model():
+    """
+    Safely loads the YOLO model with comprehensive error handling.
+    Returns False if YOLO cannot be used, True if successful.
+    """
+    global model, use_yolo
+    
+    # Check if model file exists
+    if not os.path.exists(MODEL_PATH):
+        print("No YOLO model file found. Using fallback OCR method.")
+        use_yolo = False
+        return False
+    
+    try:
+        # Import ultralytics only when needed
+        from ultralytics import YOLO
+        
+        # Try to load the model
+        model = YOLO(MODEL_PATH)
+        
+        # Test with a dummy image
+        dummy_img = np.zeros((100, 100, 3), dtype=np.uint8)
+        results = model.predict(dummy_img, verbose=False)
+        
+        print("✅ YOLO model loaded successfully")
+        use_yolo = True
+        return True
+        
+    except Exception as e:
+        error_msg = str(e)
+        print(f"❌ YOLO model loading failed: {error_msg}")
+        
+        # Check for specific compatibility errors
+        if "'AAttn' object has no attribute 'qkv'" in error_msg:
+            print("⚠️ This is a known compatibility issue with ultralytics versions.")
+            print("   Using fallback OCR method without YOLO cropping.")
+        elif "CUDA" in error_msg or "GPU" in error_msg:
+            print("⚠️ GPU/CUDA issue detected. Using fallback OCR method.")
+        else:
+            print("⚠️ Unknown YOLO error. Using fallback OCR method.")
+        
+        model = None
+        use_yolo = False
+        return False
 
 def find_id_box(img):
     """
     Runs the YOLO model on the input image and returns detected boxes or None.
-
-    Args:
-        img (np.ndarray): The input image as a NumPy array.
-
-    Returns:
-        boxes (ultralytics.yolo.engine.results.Boxes or None): Detected bounding boxes, or None if no boxes are found or an error occurs.
+    Includes comprehensive error handling for the 'AAttn' object error.
     """
+    global use_yolo, model
+    
+    if not use_yolo or model is None:
+        return None
+    
     try:
-        results = model.predict(img)
-        boxes = results[0].boxes  # boxes object
+        # Run prediction with error handling
+        results = model.predict(img, verbose=False)
+        
+        if not results or len(results) == 0:
+            return None
+            
+        boxes = results[0].boxes
         if boxes is None or len(boxes) == 0:
             return None
+            
         return boxes
+        
     except Exception as e:
-        print(f"Error while running model on image\nException: {e}")
+        error_msg = str(e)
+        print(f"❌ YOLO prediction failed: {error_msg}")
+        
+        # If we get the 'AAttn' error during prediction, disable YOLO for future calls
+        if "'AAttn' object has no attribute 'qkv'" in error_msg:
+            print("⚠️ Disabling YOLO due to compatibility issues. Using fallback OCR.")
+            use_yolo = False
+            model = None
+        
         return None
-
 
 def crop_image(img):
     """
     Crops the input image to the first detected YOLO bounding box.
-
-    Args:
-        img (np.ndarray): The input image as a NumPy array.
-
-    Returns:
-        cropped_img (np.ndarray or None): Cropped image as a NumPy array, or None if no box is found.
+    Falls back to full image if no box is detected or YOLO fails.
     """
-    boxes = find_id_box(img)
-    if boxes is None:
-        return None
+    try:
+        boxes = find_id_box(img)
+        if boxes is None:
+            print("No YOLO boxes detected, using full image for OCR")
+            return img
 
-    # Use the first detected box
-    box = boxes.xyxy[0]  # (x1, y1, x2, y2)
+        # Use the first detected box
+        box = boxes.xyxy[0]  # (x1, y1, x2, y2)
+        x1, y1, x2, y2 = map(int, box)
 
-    x1, y1, x2, y2 = map(int, box)
+        # Ensure coordinates are within image bounds
+        h, w = img.shape[:2]
+        x1 = max(0, min(x1, w))
+        y1 = max(0, min(y1, h))
+        x2 = max(0, min(x2, w))
+        y2 = max(0, min(y2, h))
+        
+        # Ensure valid crop dimensions
+        if x2 <= x1 or y2 <= y1:
+            print("Invalid crop dimensions, using full image")
+            return img
 
-    # Crop the image
-    cropped_img = img[y1:y2, x1:x2]
-    return cropped_img
+        # Crop the image
+        cropped_img = img[y1:y2, x1:x2]
+        return cropped_img
+        
+    except Exception as e:
+        print(f"Error in crop_image: {e}")
+        return img
 
 
 def download_image(image_url):
@@ -168,8 +243,20 @@ def main():
     """
     Main function to handle input, processing, and output.
     """
+    # Initialize YOLO model with error handling
+    print("🔍 Initializing YOLO model...")
+    yolo_success = load_yolo_model()
+    
+    if yolo_success:
+        print("✅ Using YOLO model for transaction ID detection")
+    else:
+        print("📝 Using fallback OCR method (full image processing)")
+    
+    # Process transactions
+    print("🔄 Processing transactions...")
     processed_df = process_transactions(INPUT_PATH)
     save(processed_df, OUTPUT_PATH)
+    print("✅ Transaction processing completed!")
 
 
 if __name__ == "__main__":
