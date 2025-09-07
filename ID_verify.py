@@ -2,76 +2,118 @@
 # It also verifies for duplicate transaction ID
 # The input file is the PDF file to be sent by the teacher
 import pandas as pd
-import pdfplumber
 from pathlib import Path
+import os
+import json
+import glob
 
 # File locations:
 TRANSACTION_REPORT_PATH = "TransactionReport.pdf"
-EXTRACTED_DATA_PATH = "processed_transactions.csv"
-OUTPUT_PATH = "verified_transactions.csv"
-VERIFIED_DB_PATH = "verified_ID.csv"
+EXTRACTED_DATA_PATH = "processed_transactions.csv"  # or .xlsx
+OUTPUT_PATH = "verified_transactions.csv"  # or .xlsx
+VERIFIED_DB_PATH = "verified_ID.csv"  # or .xlsx
 # ---
 
 
-def extract_column_ranges(words):
-    """Extracts the x-ranges for the 'rrn' and 'amount(rs.)' columns."""
-    rrn_x_range = None
-    amount_x_range = None
-    for w in words:
-        if rrn_x_range and amount_x_range:
-            break
-        if rrn_x_range is None and w["text"].lower().strip() == "rrn":
-            x0 = w["x0"]
-            rrn_x_range = (x0 - 2, x0 + 2)
-        elif amount_x_range is None and w["text"].lower().strip() == "amount(rs.)":
-            x1 = w["x1"]
-            amount_x_range = (x1 - 5, x1 + 5)
-            print(amount_x_range)
-    return rrn_x_range, amount_x_range
-
-
-def extract_column_values(words, rrn_x_range, amount_x_range):
-    """Extracts the rrn and amount values from the words based on their x-ranges."""
-    rrn_list = []
-    amount_list = []
-    if rrn_x_range:
-        for w in words:
-            if rrn_x_range[0] <= w["x0"] <= rrn_x_range[1]:
-                if w["text"].isdigit() and len(w["text"]) >= 10:
-                    rrn_list.append(w["text"])
-    if amount_x_range:
-        for w in words:
-            if amount_x_range[0] <= w["x1"] <= amount_x_range[1]:
-                if w["text"].isdigit():
-                    amount_list.append(w["text"])
-    return rrn_list, amount_list
-
+def load_column_config():
+    """Load column configuration from JSON file"""
+    try:
+        if os.path.exists("column_config.json"):
+            with open("column_config.json", "r") as f:
+                config = json.load(f)
+                return config.get("rrn_column", "rrn"), config.get("amount_column", "amount")
+    except:
+        pass
+    return "rrn", "amount"
 
 def input_report():
-    """Processes the report into a dataframe object containing all RRN numbers with their paid amount"""
-    rrn_list = []
-    amount_list = []
-    with pdfplumber.open(TRANSACTION_REPORT_PATH) as pdf:
-        for page in pdf.pages:
-            words = page.extract_words(
-                keep_blank_chars=False,
-                use_text_flow=True,
-                x_tolerance=1,
-                y_tolerance=1.0,
-            )
-            rrn_x_range, amount_x_range = extract_column_ranges(words)
-            page_rrn_list, page_amount_list = extract_column_values(
-                words, rrn_x_range, amount_x_range
-            )
-            rrn_list.extend(page_rrn_list)
-            amount_list.extend(page_amount_list)
+    """Processes all transaction report files and combines them into a single dataframe"""
+    all_dfs = []
+    
+    # Check for single files
+    single_files = [
+        ("TransactionReport.xlsx", "xlsx"), 
+        ("TransactionReport.csv", "csv")
+    ]
+    
+    # Check for numbered files
+    numbered_files = []
+    for ext in ["xlsx", "csv"]:
+        numbered_files.extend([(f, ext) for f in glob.glob(f"TransactionReport_*.{ext}")])
+    
+    # Combine all found files
+    found_files = [(f, ext) for f, ext in single_files if os.path.exists(f)]
+    found_files.extend(numbered_files)
+    
+    if not found_files:
+        raise FileNotFoundError("No transaction report files found (CSV or Excel)")
+    
+    print(f"Processing {len(found_files)} transaction report file(s)...")
+    
+    for file_path, file_type in found_files:
+        print(f"Processing: {file_path}")
+        
+        if file_type == "xlsx":
+            df = process_excel_report(file_path)
+        elif file_type == "csv":
+            df = process_csv_report(file_path)
+        
+        if not df.empty:
+            all_dfs.append(df)
+    
+    if not all_dfs:
+        raise ValueError("No valid data found in transaction report files")
+    
+    # Combine all dataframes
+    combined_df = pd.concat(all_dfs, ignore_index=True)
+    
+    # Remove duplicates based on RRN
+    combined_df = combined_df.drop_duplicates(subset=['rrn'])
+    
+    print(f"Total unique transactions loaded: {len(combined_df)}")
+    return combined_df
 
-    df = pd.DataFrame(
-        {"rrn": rrn_list, "amount": amount_list},
-    )
-    df["rrn"] = df["rrn"].astype("Int64")
-    df["amount"] = df["amount"].astype("Int32")
-    return df
+def process_excel_report(excel_path):
+    """Processes Excel transaction report with custom column names"""
+    df = pd.read_excel(excel_path)
+    rrn_col, amount_col = load_column_config()
+    
+    # Check if specified columns exist
+    if rrn_col not in df.columns:
+        raise ValueError(f"Column '{rrn_col}' not found in {excel_path}. Available columns: {list(df.columns)}")
+    if amount_col not in df.columns:
+        raise ValueError(f"Column '{amount_col}' not found in {excel_path}. Available columns: {list(df.columns)}")
+    
+    # Rename columns to standard names
+    df_processed = df[[rrn_col, amount_col]].copy()
+    df_processed.columns = ['rrn', 'amount']
+    
+    # Convert data types
+    df_processed["rrn"] = df_processed["rrn"].astype("Int64")
+    df_processed["amount"] = df_processed["amount"].astype("Int32")
+    
+    return df_processed
+
+def process_csv_report(csv_path):
+    """Processes CSV transaction report with custom column names"""
+    df = pd.read_csv(csv_path)
+    rrn_col, amount_col = load_column_config()
+    
+    # Check if specified columns exist
+    if rrn_col not in df.columns:
+        raise ValueError(f"Column '{rrn_col}' not found in {csv_path}. Available columns: {list(df.columns)}")
+    if amount_col not in df.columns:
+        raise ValueError(f"Column '{amount_col}' not found in {csv_path}. Available columns: {list(df.columns)}")
+    
+    # Rename columns to standard names
+    df_processed = df[[rrn_col, amount_col]].copy()
+    df_processed.columns = ['rrn', 'amount']
+    
+    # Convert data types
+    df_processed["rrn"] = df_processed["rrn"].astype("Int64")
+    df_processed["amount"] = df_processed["amount"].astype("Int32")
+    
+    return df_processed
 
 
 def id_verification(input_df, report_df):
@@ -94,14 +136,16 @@ def id_verification(input_df, report_df):
 
 
 def read_verified_file():
-    """Reads and returns the dataframe of Verified ID"""
+    """Reads and returns the dataframe of Verified ID (csv or xlsx)"""
     verified_file = Path(VERIFIED_DB_PATH)
     # Check if file exists. Make new if not
     if verified_file.exists():
-        verified_df = pd.read_csv(verified_file, dtype={"rrn": int})
+        if verified_file.suffix == ".xlsx":
+            verified_df = pd.read_excel(verified_file, dtype={"rrn": int})
+        else:
+            verified_df = pd.read_csv(verified_file, dtype={"rrn": int})
     else:
         verified_df = pd.DataFrame(columns=["rrn"])
-
     return verified_df
 
 
@@ -112,14 +156,15 @@ def duplicate_check(input_df):
 
     # Identifying duplicates
     input_df["duplicate"] = input_df["extracted_transaction_id"].apply(
-        lambda rrn: rrn in set(verified_dataframe["rrn"].astype(int))
+        lambda rrn: rrn in set(verified_dataframe["rrn"].astype(int)) if pd.notna(rrn) else False
     )
-
-    # Appending the non duplicate entries to the verified database
-    append_verified(input_df, verified_dataframe)
 
     # Changing the "Verified" status of duplicates
     input_df.loc[input_df["duplicate"], "Verification"] = "Duplicate"
+    
+    # Appending the non duplicate verified entries to the verified database
+    append_verified(input_df, verified_dataframe)
+    
     input_df.drop(columns=["duplicate"], inplace=True)
 
     return input_df
@@ -127,49 +172,96 @@ def duplicate_check(input_df):
 
 def mismatch_check(input_df, report_df):
     """Checks for mismatch amount from the report"""
-
-    # Identifying Mismatch amount
-    input_df["amtVerify"] = input_df["extracted_transaction_id"].apply(
-        lambda transaction_id: input_df.loc[transaction_id, "amount"]
-        != report_df.loc[transaction_id, "amount"]
-    )
+    
+    # Skip amount mismatch check if 'amount' column doesn't exist in input_df
+    # This is normal since extracted data from screenshots typically doesn't include amounts
+    if 'amount' not in input_df.columns:
+        print("Skipping amount mismatch check - no amount data in extracted transactions")
+        return input_df
+    
+    # Create a lookup dictionary for report amounts for efficiency
+    report_amounts = dict(zip(report_df['rrn'], report_df['amount']))
+    
+    def check_amount_mismatch(row):
+        transaction_id = row['extracted_transaction_id']
+        if pd.isna(transaction_id) or transaction_id not in report_amounts:
+            return False
+        
+        input_amount = row.get('amount', None)
+        if pd.isna(input_amount):
+            return False
+            
+        report_amount = report_amounts[transaction_id]
+        return input_amount != report_amount
+    
+    # Apply the mismatch check
+    input_df["amtVerify"] = input_df.apply(check_amount_mismatch, axis=1)
     input_df.loc[input_df["amtVerify"], "Verification"] = "Amount mismatch"
-
+    
     input_df.drop(columns=["amtVerify"], inplace=True)
     return input_df
 
 
 def append_verified(input_df, verified_df):
-    """Appends the unique verified IDs in input_df to verified_df and saves verified_df"""
-    # Extracting a series of unique verified IDs
-    unique_verified_IDs = input_df.loc[
-        input_df["duplicate"], "extracted_transaction_id"
+    """Appends the unique verified IDs in input_df to verified_df and saves verified_df (csv or xlsx)"""
+    # Get verified transactions that are NOT duplicates
+    newly_verified_IDs = input_df.loc[
+        (input_df["Verification"] == "Verified") & (~input_df["duplicate"]), 
+        "extracted_transaction_id"
     ]
-
-    # Adding unique rnn to the verified database if there are any
-    if not unique_verified_IDs.empty:
+    
+    if not newly_verified_IDs.empty:
         verified_df = pd.DataFrame(
             {
                 "rrn": pd.concat(
-                    [verified_df["rrn"], unique_verified_IDs],
+                    [verified_df["rrn"], newly_verified_IDs],
                     ignore_index=True,
                 ).drop_duplicates()
             }
         )
-        verified_df.to_csv(VERIFIED_DB_PATH, index=False)
+        if Path(VERIFIED_DB_PATH).suffix == ".xlsx":
+            verified_df.to_excel(VERIFIED_DB_PATH, index=False)
+        else:
+            verified_df.to_csv(VERIFIED_DB_PATH, index=False)
 
 
 def save(output_df: pd.DataFrame):
-    output_df.to_csv(OUTPUT_PATH, index=False)
+    if Path(OUTPUT_PATH).suffix == ".xlsx":
+        output_df.to_excel(OUTPUT_PATH, index=False)
+    else:
+        output_df.to_csv(OUTPUT_PATH, index=False)
 
 
 def main():
     # Input
     report_input = input_report()
-    extracted_input = pd.read_csv(
-        EXTRACTED_DATA_PATH,
-        dtype={"extracted_transaction_id": "Int64", "amount": "Int32"},
-    )
+    
+    # Determine which extracted data file exists
+    extracted_data_path = None
+    if os.path.exists("processed_transactions.xlsx"):
+        extracted_data_path = "processed_transactions.xlsx"
+    elif os.path.exists("processed_transactions.csv"):
+        extracted_data_path = "processed_transactions.csv"
+    else:
+        raise FileNotFoundError("No processed transactions file found (processed_transactions.csv or processed_transactions.xlsx)")
+    
+    # Read the extracted data file
+    if extracted_data_path.endswith('.xlsx'):
+        extracted_input = pd.read_excel(
+            extracted_data_path,
+            dtype={"extracted_transaction_id": "Int64"},
+        )
+    else:
+        extracted_input = pd.read_csv(
+            extracted_data_path,
+            dtype={"extracted_transaction_id": "Int64"},
+        )
+    
+    # Add amount column with proper dtype if it exists, otherwise skip amount verification
+    if 'amount' in extracted_input.columns:
+        extracted_input['amount'] = extracted_input['amount'].astype("Int32")
+    else:
+        print("No amount column found in extracted data - amount verification will be skipped")
 
     # Process
     # Order: ID verification > duplicates (append non duplicates) > amount mismatch

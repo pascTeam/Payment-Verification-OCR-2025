@@ -2,6 +2,7 @@
 import streamlit as st
 import pandas as pd
 import os
+import glob
 import extraction
 import ID_verify
 from datetime import datetime
@@ -153,87 +154,104 @@ if page == "🏠 Main Dashboard":
     # File upload section
     st.markdown("## 📁 Upload Files")
     
-    col1, col2, col3 = st.columns(3)
-    
+    col1, col2 = st.columns(2)
+
     with col1:
         st.markdown("### Registration Data")
         uploaded_csv = st.file_uploader(
-            "Upload User Registration CSV",
-            type=["csv"],
-            help="Upload the CSV file containing user registration data with screenshot URLs"
+            "Upload User Registration CSV/Excel",
+            type=["csv", "xlsx"],
+            help="Upload the CSV or Excel file containing user registration data with screenshot URLs (Max 200MB per file)"
         )
-        
         if uploaded_csv is not None:
             st.success(f"✅ Uploaded: {uploaded_csv.name}")
             # Show preview
             try:
-                df_preview = pd.read_csv(uploaded_csv)
+                if uploaded_csv.name.endswith('.xlsx'):
+                    df_preview = pd.read_excel(uploaded_csv)
+                else:
+                    df_preview = pd.read_csv(uploaded_csv)
                 st.markdown("**Preview of uploaded data:**")
                 st.dataframe(df_preview.head(), use_container_width=True)
             except:
-                st.warning("Could not preview CSV file")
-    
+                st.warning("Could not preview file")
+
     with col2:
         st.markdown("### Transaction Reports")
-        uploaded_pdfs = st.file_uploader(
+        uploaded_files = st.file_uploader(
             "Upload Transaction Reports",
-            type=["pdf"],
+            type=["csv", "xlsx"],
             accept_multiple_files=True,
-            help="Upload PDF files containing transaction reports to verify against"
+            help="Upload CSV or Excel files containing transaction reports to verify against (Max 200MB per file)"
         )
         
-        if uploaded_pdfs:
-            st.success(f"✅ Uploaded {len(uploaded_pdfs)} PDF file(s)")
-            for pdf in uploaded_pdfs:
-                st.write(f"📄 {pdf.name}")
-    
-    with col3:
-        st.markdown("### YOLO Model (Optional)")
-        uploaded_model = st.file_uploader(
-            "Upload YOLO Model",
-            type=["pt", "pth"],
-            help="Upload your trained YOLO model for transaction ID detection (optional - will use fallback OCR if not provided)"
-        )
+        # Column selection for CSV/Excel files
+        rrn_column = None
+        amount_column = None
         
-        if uploaded_model is not None:
-            st.success(f"✅ Uploaded: {uploaded_model.name}")
-            # Test the model
-            try:
-                from ultralytics import YOLO
-                # Save the uploaded model temporarily
-                with open("temp_model.pt", "wb") as f:
-                    f.write(uploaded_model.getbuffer())
+        if uploaded_files:
+            st.success(f"✅ Uploaded {len(uploaded_files)} file(s)")
+            
+            # Show file list
+            for i, file in enumerate(uploaded_files):
+                file_type = ""
+                st.write(f"{file_type} {file.name}")
+            
+            # Check if any CSV/Excel files are uploaded for column selection
+            csv_excel_files = uploaded_files  # All files are now CSV/Excel
+            
+            if csv_excel_files:
+                st.markdown("#### Column Configuration")
+                st.info("📝 For CSV/Excel files, please specify which columns contain the RRN and Amount data:")
                 
-                # Test the model
-                test_model = YOLO("temp_model.pt")
-                dummy_img = np.zeros((100, 100, 3), dtype=np.uint8)
-                test_model.predict(dummy_img, verbose=False)
-                st.success("✅ Model loaded successfully")
-                
-                # Clean up temp file
-                if os.path.exists("temp_model.pt"):
-                    os.remove("temp_model.pt")
+                # Preview the first CSV/Excel file to show available columns
+                first_data_file = csv_excel_files[0]
+                try:
+                    if first_data_file.name.endswith('.xlsx'):
+                        preview_df = pd.read_excel(first_data_file)
+                    else:
+                        preview_df = pd.read_csv(first_data_file)
                     
-            except Exception as e:
-                error_msg = str(e)
-                if "'AAttn' object has no attribute 'qkv'" in error_msg:
-                    st.warning("⚠️ Model has compatibility issues with current ultralytics version")
-                    st.info("ℹ️ System will automatically use fallback OCR method")
-                else:
-                    st.warning(f"⚠️ Model may have compatibility issues: {error_msg[:50]}...")
-                
-                # Clean up temp file
-                if os.path.exists("temp_model.pt"):
-                    os.remove("temp_model.pt")
-        else:
-            st.info("ℹ️ No model uploaded - will use fallback OCR method")
+                    available_columns = list(preview_df.columns)
+                    
+                    col_a, col_b = st.columns(2)
+                    with col_a:
+                        rrn_column = st.selectbox(
+                            "RRN Column:",
+                            options=available_columns,
+                            index=0 if 'rrn' not in [col.lower() for col in available_columns] else [col.lower() for col in available_columns].index('rrn'),
+                            help="Select the column containing RRN/Transaction ID numbers"
+                        )
+                    
+                    with col_b:
+                        amount_column = st.selectbox(
+                            "Amount Column:",
+                            options=available_columns,
+                            index=0 if 'amount' not in [col.lower() for col in available_columns] else [col.lower() for col in available_columns].index('amount'),
+                            help="Select the column containing transaction amounts"
+                        )
+                    
+                    # Show preview with selected columns
+                    st.markdown(f"**Preview of {first_data_file.name} with selected columns:**")
+                    preview_selected = preview_df[[rrn_column, amount_column]].head()
+                    st.dataframe(preview_selected, use_container_width=True)
+                    
+                except Exception as e:
+                    st.warning(f"Could not preview {first_data_file.name}: {str(e)}")
+                    
+                    # Fallback manual input
+                    col_a, col_b = st.columns(2)
+                    with col_a:
+                        rrn_column = st.text_input("RRN Column Name:", value="rrn")
+                    with col_b:
+                        amount_column = st.text_input("Amount Column Name:", value="amount")
 
     # Process button
     st.markdown("---")
     st.markdown("## 🔄 Start Verification Process")
     
     if st.button("🚀 Start Verification", type="primary", use_container_width=True):
-        if uploaded_csv is not None and uploaded_pdfs:
+        if uploaded_csv is not None and uploaded_files:
             # Progress tracking
             progress_bar = st.progress(0)
             status_text = st.empty()
@@ -243,24 +261,36 @@ if page == "🏠 Main Dashboard":
                 status_text.text("📁 Saving uploaded files...")
                 progress_bar.progress(10)
                 
-                with open("input.csv", "wb") as f:
-                    f.write(uploaded_csv.getbuffer())
-                
-                if uploaded_pdfs:
-                    first_pdf = uploaded_pdfs[0]
-                    with open("TransactionReport.pdf", "wb") as f:
-                        f.write(first_pdf.getbuffer())
-                
-                # Save model if uploaded
-                if uploaded_model is not None:
-                    with open("model.pt", "wb") as f:
-                        f.write(uploaded_model.getbuffer())
-                    status_text.text("🤖 YOLO model saved and ready for use")
+                # Save registration file with appropriate extension
+                if uploaded_csv.name.endswith('.xlsx'):
+                    with open("input.xlsx", "wb") as f:
+                        f.write(uploaded_csv.getbuffer())
                 else:
-                    # Remove any existing model file to use fallback
-                    if os.path.exists("model.pt"):
-                        os.remove("model.pt")
-                    status_text.text("📝 Using fallback OCR method (no YOLO model)")
+                    with open("input.csv", "wb") as f:
+                        f.write(uploaded_csv.getbuffer())
+                
+                # Save transaction report files
+                if uploaded_files:
+                    # Save all files with numbered suffixes if multiple
+                    for i, file in enumerate(uploaded_files):
+                        if file.name.endswith('.xlsx'):
+                            filename = f"TransactionReport_{i}.xlsx" if len(uploaded_files) > 1 else "TransactionReport.xlsx"
+                            with open(filename, "wb") as f:
+                                f.write(file.getbuffer())
+                        elif file.name.endswith('.csv'):
+                            filename = f"TransactionReport_{i}.csv" if len(uploaded_files) > 1 else "TransactionReport.csv"
+                            with open(filename, "wb") as f:
+                                f.write(file.getbuffer())
+                    
+                    # Save column configuration for CSV/Excel files
+                    if rrn_column and amount_column:
+                        column_config = {
+                            "rrn_column": rrn_column,
+                            "amount_column": amount_column
+                        }
+                        import json
+                        with open("column_config.json", "w") as f:
+                            json.dump(column_config, f)
                 
                 progress_bar.progress(20)
                 
@@ -328,7 +358,7 @@ if page == "🏠 Main Dashboard":
                 st.error(f"❌ An error occurred: {str(e)}")
                 st.exception(e)
         else:
-            st.warning("⚠️ Please upload both the CSV and at least one PDF file to proceed.")
+            st.warning("⚠️ Please upload both the registration file and at least one transaction report file to proceed.")
 
 elif page == "📊 Results":
     st.markdown("## 📊 Previous Results")
@@ -388,16 +418,15 @@ elif page == "ℹ️ About":
     and AI-powered object detection to extract and validate transaction IDs from payment screenshots.
     
     ### 🔧 How It Works
-    1. **Upload Registration Data**: CSV file containing user information and screenshot URLs
-    2. **Upload Transaction Reports**: PDF files with official transaction records
-    3. **Upload YOLO Model** (Optional): Your trained YOLO model for transaction ID detection
-    4. **AI Processing**: 
+    1. **Upload Registration Data**: CSV or Excel file containing user information and screenshot URLs
+    2. **Upload Transaction Reports**: CSV or Excel files with official transaction records
+    3. **AI Processing**: 
        - Downloads screenshots from URLs
-       - Uses YOLO model to detect transaction ID regions (if provided)
-       - Falls back to full-image OCR if no model is provided
+       - Uses YOLO model to detect transaction ID regions (if available)
+       - Falls back to full-image OCR if no model is available
        - Extracts transaction IDs using OCR
-    5. **Verification**: Matches extracted IDs with official transaction records
-    6. **Results**: Generates comprehensive verification report
+    4. **Verification**: Matches extracted IDs with official transaction records
+    5. **Results**: Generates comprehensive verification report
     
     ### 🛠️ Technology Stack
     - **Python**: Core programming language
@@ -414,9 +443,8 @@ elif page == "ℹ️ About":
     - **Amazon Pay**: Bank Reference IDs
     
     ### 📁 File Requirements
-    - **Input CSV**: Must contain 'screenshots' column with image URLs
-    - **Transaction PDF**: Official transaction reports for verification
-    - **YOLO Model** (Optional): Trained YOLO model (.pt or .pth format) for transaction ID detection
+    - **Input CSV/Excel**: Must contain 'screenshots' column with image URLs (Max 200MB per file)
+    - **Transaction Reports**: CSV or Excel files with official transaction reports for verification (Max 200MB per file)
     """)
     
     # System information
@@ -428,15 +456,24 @@ elif page == "ℹ️ About":
         model_exists = os.path.exists("model.pt")
         st.write(f"YOLO Model: {'✅ Present' if model_exists else '❌ Missing'}")
         
-        if os.path.exists("input.csv"):
-            st.write("Input CSV: ✅ Present")
+        if os.path.exists("input.csv") or os.path.exists("input.xlsx"):
+            st.write("Input File: ✅ Present")
         else:
-            st.write("Input CSV: ❌ Not uploaded")
+            st.write("Input File: ❌ Not uploaded")
             
-        if os.path.exists("TransactionReport.pdf"):
-            st.write("Transaction PDF: ✅ Present")
+        # Check for transaction report files (single or multiple)
+        transaction_files = []
+        for ext in ["csv", "xlsx"]:
+            if os.path.exists(f"TransactionReport.{ext}"):
+                transaction_files.append(f"TransactionReport.{ext}")
+            # Check for numbered files
+            numbered = glob.glob(f"TransactionReport_*.{ext}")
+            transaction_files.extend(numbered)
+        
+        if transaction_files:
+            st.write(f"Transaction Report: ✅ Present ({len(transaction_files)} file(s))")
         else:
-            st.write("Transaction PDF: ❌ Not uploaded")
+            st.write("Transaction Report: ❌ Not uploaded")
     
     with col2:
         st.markdown("**Output Files:**")

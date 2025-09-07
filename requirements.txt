@@ -3,8 +3,8 @@
 # Core data processing
 pandas>=1.5.0
 
-# PDF processing
-pdfplumber>=0.9.0
+# Excel file support
+openpyxl>=3.0.0
 
 # Computer vision and image processing
 opencv-python>=4.8.0
@@ -16,7 +16,7 @@ pytesseract>=0.3.10
 # HTTP requests for downloading images
 requests>=2.31.0
 
-# YOLO object detection
+# YOLO object detection (optional)
 ultralytics>=8.0.0
 
 # Web UI framework
@@ -25,8 +25,11 @@ streamlit>=1.28.0
 # Image processing for UI
 Pillow>=9.0.0
 
-# Streamlit for UI
-streamlit>=1.20.0
+# JSON handling (built-in, but good to mention)
+# json (built-in)
+
+# File operations
+pathlib
 
 # Note: pytesseract requires Tesseract OCR to be installed on the system
 # For macOS: brew install tesseract

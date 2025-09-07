@@ -15,10 +15,10 @@ warnings.filterwarnings('ignore')
 # --- IMP: Set the paths of the following properly
 # Include the code to choose yolo model here
 MODEL_PATH = "model.pt"
-INPUT_PATH = "input.csv"
+INPUT_PATH = "input.csv"  # or .xlsx
 # Input format:
 # column : "screenshots" with all screenshot URLs
-OUTPUT_PATH = "processed_transactions.csv"
+OUTPUT_PATH = "processed_transactions.csv"  # or .xlsx
 # ---
 
 # Global model variable
@@ -211,32 +211,41 @@ def extract_transaction_details(text):
 
 def process_transactions(reg_path):
     """
-    Processes an input CSV file to extract transaction IDs from screenshots.
+    Processes an input CSV/Excel file to extract transaction IDs from screenshots.
 
     Args:
-        reg_path (str): Path to the input CSV file.
+        reg_path (str): Path to the input CSV or Excel file.
 
     Returns:
         reg (pd.DataFrame): DataFrame with an added 'extracted_transaction_id' column.
     """
-    reg = pd.read_csv(reg_path, dtype=str)
+    # Check file extension and read accordingly
+    if reg_path.endswith('.xlsx'):
+        reg = pd.read_excel(reg_path, dtype=str)
+    else:
+        reg = pd.read_csv(reg_path, dtype=str)
+    
     reg["extracted_transaction_id"] = (
         reg["screenshot"].dropna().apply(process_image_url)
     )
     return reg
 
 
-def save(df, output_filename="processed_transactions.xlsx"):
+def save(df, output_filename="processed_transactions.csv"):
     """
-    Saves the processed DataFrame to a CSV file.
+    Saves the processed DataFrame to a CSV or Excel file.
 
     Args:
         df (pd.DataFrame): DataFrame to save.
-        output_filename (str): Output CSV filename.
+        output_filename (str): Output filename (CSV or Excel).
     """
     df["extracted_transaction_id"] = df["extracted_transaction_id"].astype("Int64")
-    df.to_csv(output_filename, index=False)
-    # files.download(output_filename)
+    
+    # Save based on file extension
+    if output_filename.endswith('.xlsx'):
+        df.to_excel(output_filename, index=False)
+    else:
+        df.to_csv(output_filename, index=False)
 
 
 def main():
@@ -252,9 +261,20 @@ def main():
     else:
         print("📝 Using fallback OCR method (full image processing)")
     
+    # Determine input file path (check both .csv and .xlsx)
+    input_path = None
+    if os.path.exists("input.xlsx"):
+        input_path = "input.xlsx"
+    elif os.path.exists("input.csv"):
+        input_path = "input.csv"
+    else:
+        raise FileNotFoundError("No input file found (input.csv or input.xlsx)")
+    
+    print(f"📁 Using input file: {input_path}")
+    
     # Process transactions
     print("🔄 Processing transactions...")
-    processed_df = process_transactions(INPUT_PATH)
+    processed_df = process_transactions(input_path)
     save(processed_df, OUTPUT_PATH)
     print("✅ Transaction processing completed!")
 
