@@ -158,7 +158,7 @@ if page == "🏠 Main Dashboard":
                 else:
                     df_preview = pd.read_csv(uploaded_csv)
                 st.markdown("**Preview of uploaded data:**")
-                st.dataframe(df_preview.head(), use_container_width=True)
+                st.dataframe(df_preview.head(), width='stretch')
             except:
                 st.warning("Could not preview file")
 
@@ -220,7 +220,7 @@ if page == "🏠 Main Dashboard":
                     # Show preview with selected columns
                     st.markdown(f"**Preview of {first_data_file.name} with selected columns:**")
                     preview_selected = preview_df[[rrn_column, amount_column]].head()
-                    st.dataframe(preview_selected, use_container_width=True)
+                    st.dataframe(preview_selected, width='stretch')
                     
                 except Exception as e:
                     st.warning(f"Could not preview {first_data_file.name}: {str(e)}")
@@ -236,7 +236,7 @@ if page == "🏠 Main Dashboard":
     st.markdown("---")
     st.markdown("## 🔄 Start Verification Process")
     
-    if st.button("🚀 Start Verification", type="primary", use_container_width=True):
+    if st.button("🚀 Start Verification", type="primary", width='stretch'):
         if uploaded_csv is not None and uploaded_files:
             # Progress tracking
             progress_bar = st.progress(0)
@@ -326,7 +326,7 @@ if page == "🏠 Main Dashboard":
                     
                     # Results table
                     st.markdown("### Detailed Results")
-                    st.dataframe(df_results, use_container_width=True)
+                    st.dataframe(df_results, width='stretch')
                     
                     # Download button
                     with open("verified_transactions.csv", "rb") as file:
@@ -335,7 +335,7 @@ if page == "🏠 Main Dashboard":
                             data=file,
                             file_name=f"verified_transactions_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
                             mime="text/csv",
-                            use_container_width=True
+                            width='stretch'
                         )
                 else:
                     st.error("❌ The output file 'verified_transactions.csv' was not generated.")
@@ -381,7 +381,7 @@ elif page == "📊 Results":
         else:
             filtered_df = df_results
         
-        st.dataframe(filtered_df, use_container_width=True)
+        st.dataframe(filtered_df, width='stretch')
         
         # Download filtered results
         if filter_option != "All":
