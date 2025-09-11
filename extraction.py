@@ -42,12 +42,8 @@ def load_yolo_model():
         # Import ultralytics only when needed
         from ultralytics import YOLO
         
-        # Try to load the model
+        # Try to load the model lazily and cache in memory
         model = YOLO(MODEL_PATH)
-        
-        # Test with a dummy image
-        dummy_img = np.zeros((100, 100, 3), dtype=np.uint8)
-        results = model.predict(dummy_img, verbose=False)
         
         print("✅ YOLO model loaded successfully")
         use_yolo = True

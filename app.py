@@ -121,24 +121,10 @@ with st.sidebar:
     st.markdown("---")
     st.markdown("### 📈 System Status")
     
-    # Check if model file exists
+    # Lightweight check only; defer model loading to first use
     model_exists = os.path.exists("model.pt")
     if model_exists:
-        try:
-            # Try to load the model to test if it works
-            from ultralytics import YOLO
-            test_model = YOLO("model.pt")
-            dummy_img = np.zeros((100, 100, 3), dtype=np.uint8)
-            test_model.predict(dummy_img, verbose=False)
-            st.success("✅ YOLO Model Ready")
-        except Exception as e:
-            error_msg = str(e)
-            if "'AAttn' object has no attribute 'qkv'" in error_msg:
-                st.warning("⚠️ YOLO Model has compatibility issues")
-                st.caption("Will use fallback OCR automatically")
-            else:
-                st.warning("⚠️ YOLO Model may have compatibility issues")
-                st.caption(f"Error: {error_msg[:50]}...")
+        st.info("YOLO model present. It will load on first use.")
     else:
         st.info("ℹ️ No YOLO Model - Will use fallback OCR")
     
