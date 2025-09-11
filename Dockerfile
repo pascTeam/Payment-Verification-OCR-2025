@@ -1,4 +1,4 @@
-# Dockerfile for deploying the Streamlit app on Railway
+# Dockerfile for deploying the Streamlit app on Render
 FROM python:3.11-slim
 
 # Avoid interactive prompts during apt installs
@@ -6,6 +6,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     STREAMLIT_SERVER_HEADLESS=true \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PORT=8080
 
 # Install system dependencies needed by OpenCV and Tesseract OCR
@@ -27,7 +28,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy the rest of the source code
 COPY . .
 
-# Expose the port (useful for local runs; Railway sets PORT env)
+# Expose the port (Render sets PORT env; useful for local runs)
 EXPOSE 8080
 
 # Start Streamlit binding to 0.0.0.0 and the provided PORT
