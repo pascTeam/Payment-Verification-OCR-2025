@@ -8,6 +8,7 @@ import pandas as pd
 import os
 import warnings
 import traceback
+import gc
 
 # Suppress warnings that might cause issues
 warnings.filterwarnings('ignore')
@@ -147,11 +148,19 @@ def download_image(image_url):
     Returns:
         img (np.ndarray or None): Decoded image as a NumPy array, or None if download fails.
     """
-    response = requests.get(image_url)
-    if response.status_code == 200:
-        image_array = np.asarray(bytearray(response.content), dtype=np.uint8)
-        return cv2.imdecode(image_array, cv2.IMREAD_COLOR)
-    return None
+    response = None
+    try:
+        response = requests.get(image_url, stream=True, timeout=20)
+        if response.status_code == 200:
+            # Use frombuffer to avoid an extra copy
+            buf = response.content
+            image_array = np.frombuffer(buf, dtype=np.uint8)
+            img = cv2.imdecode(image_array, cv2.IMREAD_COLOR)
+            return img
+        return None
+    finally:
+        if response is not None:
+            response.close()
 
 
 def process_image_url(image_url):
@@ -164,6 +173,8 @@ def process_image_url(image_url):
     Returns:
         transaction_id (str or None): Extracted transaction ID, or None if extraction fails.
     """
+    image = None
+    cropped = None
     try:
         if not image_url:
             return None
@@ -174,11 +185,20 @@ def process_image_url(image_url):
                 return None
             text = pytesseract.image_to_string(cropped)
             extract = extract_transaction_details(text)
+            if extract is not None:
+                print(f"[EXTRACTED] url={image_url} id={extract}")
+            else:
+                print(f"[NO_MATCH] url={image_url}")
             return extract
         return None
     except Exception as e:
         print(f"[ERROR] Failed to process image URL: {image_url}\nException: {e}")
         return None
+    finally:
+        # Explicitly free large arrays
+        del image
+        del cropped
+        gc.collect()
 
 
 def extract_transaction_details(text):
@@ -221,9 +241,14 @@ def process_transactions(reg_path):
     else:
         reg = pd.read_csv(reg_path, dtype=str)
     
-    reg["extracted_transaction_id"] = (
-        reg["screenshot"].dropna().apply(process_image_url)
-    )
+    # Process row by row to limit memory; do not retain image arrays
+    extracted_ids = []
+    urls = reg["screenshot"].fillna("").tolist()
+    total = len(urls)
+    for idx, url in enumerate(urls, start=1):
+        print(f"[PROCESS] {idx}/{total} url={url}")
+        extracted_ids.append(process_image_url(url))
+    reg["extracted_transaction_id"] = extracted_ids
     return reg
 
 
