@@ -139,6 +139,9 @@ with st.sidebar:
 if page == "🏠 Main Dashboard":
     # File upload section
     st.markdown("## 📁 Upload Files")
+    # Initialize processing guard
+    if "processing" not in st.session_state:
+        st.session_state.processing = False
     
     col1, col2 = st.columns(2)
 
@@ -237,6 +240,10 @@ if page == "🏠 Main Dashboard":
     st.markdown("## 🔄 Start Verification Process")
     
     if st.button("🚀 Start Verification", type="primary", width='stretch'):
+        if st.session_state.processing:
+            st.info("A verification run is already in progress. Please wait...")
+            st.stop()
+        st.session_state.processing = True
         if uploaded_csv is not None and uploaded_files:
             # Progress tracking
             progress_bar = st.progress(0)
@@ -343,8 +350,11 @@ if page == "🏠 Main Dashboard":
             except Exception as e:
                 st.error(f"❌ An error occurred: {str(e)}")
                 st.exception(e)
+            finally:
+                st.session_state.processing = False
         else:
             st.warning("⚠️ Please upload both the registration file and at least one transaction report file to proceed.")
+            st.session_state.processing = False
 
 elif page == "📊 Results":
     st.markdown("## 📊 Previous Results")
