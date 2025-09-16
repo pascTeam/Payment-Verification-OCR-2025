@@ -11,6 +11,7 @@ import traceback
 import gc
 
 # Suppress warnings that might cause issues
+pytesseract.pytesseract.tesseract_cmd = "/usr/bin/tesseract"
 warnings.filterwarnings('ignore')
 
 # --- IMP: Set the paths of the following properly
